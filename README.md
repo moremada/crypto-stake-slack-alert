@@ -1,8 +1,11 @@
-# crypto-stake-slack-alert
-A way to send slack alerts when crypto staking rewards are received.
+# Crypto Stake Slack Alert
+An integration script that sends messages to Slack when your staking wallet receives rewards.
+
+## Setup
+Clone or download the contents of this repo and run `npm install` inside the base directory.
 
 ## Usage
-### Qt Wallet
+### Qt Wallet (Linux Daemon)
 In your qt wallet config file, add the following line:
 ```
 walletnotify=nodejs <path-to-this-repo>/index.js <slack-webhook-url> <slack-member-id> pure %s

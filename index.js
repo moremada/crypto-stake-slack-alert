@@ -73,7 +73,10 @@ txnApi.pure = {
           return reject();
         }
 
-        rewardInfo.amount = txnJson.amount + txnJson.fee;
+        // TODO: Fix this amount calculation. It is wrong because the
+        // transaction state changes as it gets confirmed (or something).
+        //rewardInfo.amount = txnJson.amount + txnJson.fee;
+        rewardInfo.amount = 7;
         rewardInfo.txnDetailsUrl = txnApi.pure.detailsBaseUrl + txnId;
 
         return resolve(rewardInfo);
@@ -83,7 +86,10 @@ txnApi.pure = {
 };
 
 function logError(message) {
-  fs.appendFile('error.log', message);
+  var timestamp = new Date().toISOString()
+    .replace(/T/, ' ')
+    .replace(/\..+/, '');
+  fs.appendFile('error.log', timestamp + ' - ' + message);
 }
 
 function sendSlackMessage(message) {

@@ -53,7 +53,7 @@ var txnApi = {
   },
   getTxnHistory: (currency) => {
     return new Promise((resolve, reject) => {
-      fs.readFile(logsDir + '/' + currency + '.txn-history.log', (err, data) => {
+      fs.readFile(logsDir + '/' + currency + '.txn-history.log', 'utf8', (err, data) => {
         if (err) {
           logError(currency, err);
           return resolve([]);
@@ -75,7 +75,7 @@ var txnApi = {
       txnHistory = txnHistory.slice(txnHistory.length - 10);
     }
 
-    fs.writeFile(logsDir + '/' + currency + '.txn-history.log', txnHistory.join("\n"));
+    fs.writeFile(logsDir + '/' + currency + '.txn-history.log', txnHistory.join("\n"), 'utf8');
   }
 };
 
@@ -128,7 +128,7 @@ function logError(context, message) {
   var timestamp = new Date().toISOString()
     .replace(/T/, ' ')
     .replace(/\..+/, '');
-  fs.appendFile(logsDir + '/' + context + '.error.log', timestamp + ' - ' + message);
+  fs.appendFile(logsDir + '/' + context + '.error.log', 'utf8', timestamp + ' - ' + message);
 }
 
 function sendSlackMessage(message) {

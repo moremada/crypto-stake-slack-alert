@@ -128,7 +128,7 @@ function logError(context, message) {
   var timestamp = new Date().toISOString()
     .replace(/T/, ' ')
     .replace(/\..+/, '');
-  fs.appendFile(logsDir + '/' + context + '.error.log', 'utf8', timestamp + ' - ' + message);
+  fs.appendFile(logsDir + '/' + context + '.error.log', timestamp + ' - ' + message + "\n", 'utf8');
 }
 
 function sendSlackMessage(message) {

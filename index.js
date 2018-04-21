@@ -1,12 +1,16 @@
 'use strict';
 
-const fs = require('fs');
-const request = require('request');
 const exec = require('child_process').exec;
+const express = require('express');
+const fs = require('fs');
+const redis = require('redis');
+const request = require('request');
+const slack = require('./lib/slack');
+const txn = require('./lib/txn');
 
 if (process.argv.length <= 2) {
   console.log('Usage: ' + __filename + ' <txnId>');
-  process.exit(-1);
+  process.exit(0);
 }
 
 var logsDir = __dirname + '/logs';
@@ -14,110 +18,40 @@ var slackWebhookUrl = process.argv[2];
 var slackMemberId = process.argv[3];
 var currency = process.argv[4];
 var txnId = process.argv[5];
+var rClient = redis.createClient();
+var app = express();
 
-var slackApi = {
-  sendMessage: (webhookUrl, message) => {
-    return new Promise((resolve, reject) => {
-      request({
-        url: webhookUrl,
-        method: 'POST',
-        headers: {
-          'Content-type': 'application/json'
-        },
-        json: true,
-        body: {
-          text: message
-        },
-        callback: (err, respObj, resp) => {
-          if (err !== null) {
-            logError('slack', err);
-            return reject();
-          }
-          return resolve();
-        }
-      });
-    });
-  }
-};
+app.use(express.json());
+app.use(express.urlencoded());
 
-var txnApi = {
-  getRewardInfo: (currency, txnId) => {
-    return new Promise((resolve, reject) => {
-      if (!txnApi.hasOwnProperty(currency)) {
-        logError('The "' + currency + '" currency is not supported.');
-        return reject();
-      }
 
-      return txnApi[currency].getRewardInfo(txnId).then(resolve, reject);
-    });
-  },
-  getTxnHistory: (currency) => {
-    return new Promise((resolve, reject) => {
-      fs.readFile(logsDir + '/' + currency + '.txn-history.log', 'utf8', (err, data) => {
-        if (err) {
-          logError(currency, err);
-          return resolve([]);
-        }
-
-        return resolve(data.split("\n"));
-      });
-    });
-  },
-  logTxnId: (currency, txnId, txnHistory) => {
-    if (!txnHistory) {
-      txnApi.getTxnHistory(currency).then((txnHistory) => {
-        return txnApi.logTxnId(currency, txnId, txnHistory);
-      });
+function requireBodyParams(req, res, params) {
+  var paramsMissing = [];
+  for (let i = 0; i < params.length; ++i) {
+    if (!req.body.hasOwnProperty(params[i])) {
+      paramsMissing.push(params[i]);
     }
-
-    txnHistory.push(txnId);
-    if(txnHistory.length > 10) {
-      txnHistory = txnHistory.slice(txnHistory.length - 10);
-    }
-
-    fs.writeFile(logsDir + '/' + currency + '.txn-history.log', txnHistory.join("\n"), 'utf8');
   }
-};
-
-txnApi.pure = {
-  detailsBaseUrl: 'http://104.200.67.171:12312/tx/',
-
-  getRewardInfo: (txnId) => {
-    return new Promise((resolve, reject) => {
-      txnApi.getTxnHistory('pure').then((txnHistory) => {
-        // Only process a txn once.
-        if (txnHistory.indexOf(txnId) !== -1) {
-          return resolve();
-        }
-
-        exec('pured gettransaction ' + txnId, (err, stdout, stderr) => {
-          if (err) {
-            logError('pure', err);
-            return reject();
-          }
-          if (stderr) {
-            logError('pure', stderr);
-            return reject();
-          }
-
-          var rewardInfo = {};
-          var txnJson = JSON.parse(stdout);
-
-          if (!txnJson.generated) {
-            return reject();
-          }
-
-          rewardInfo.amount = txnJson.fee - txnJson.vout[2].value;
-          rewardInfo.txnDetailsUrl = txnApi.pure.detailsBaseUrl + txnId;
-
-          txnApi.logTxnId('pure', txnId, txnHistory);
-
-          return resolve(rewardInfo);
-        });
-      });
-    });
+  if (paramsMissing.length > 0) {
+    res.status(400).send({ error: "Missing required param" +
+        (paramsMissing.length === 1 ? '' : 's') +
+        ": '" + paramsMissing.join(', ')  + "'." });
+    return false;
   }
-};
+  return true;
+}
+
+app.post('/api/v1/reward', (req, res) => {
+  if (!requireBodyParams(req, res, ['slack-webook-url', 'slack-member-id', 'currency', 'txn-id']) {
+    return;
+  }
+  
+  txn.getRewardInfo(req.body['currency'], req.body['txn-id']).then((rewardInfo) => {
+    var message = '<@' + req.body['slack-member-id'] + '> received a staking reward of ' + rewardInfo.amount + ' PURE.\n' + rewardInfo.txnDetailsUrl;
+    slack.sendMessage( req.body['slack-webhook-url'], message);
+  });  
+});
+
 
 function logError(context, message) {
   if (!message) {
@@ -149,9 +83,4 @@ function sendSlackMessage(message) {
     }
   });
 }
-
-txnApi.getRewardInfo(currency, txnId).then((rewardInfo) => {
-  var message = '<@' + slackMemberId + '> received a staking reward of ' + rewardInfo.amount + ' PURE.\n' + rewardInfo.txnDetailsUrl;
-  slackApi.sendMessage(slackWebhookUrl, message);
-});
 
